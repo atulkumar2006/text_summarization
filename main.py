@@ -1,72 +1,53 @@
 import tkinter as tk
 from tkinter import scrolledtext, messagebox
-from summarizer import summarize_text
+from transformers import pipeline
+import threading
 
-def summarize_action():
-    input_text = text_input.get("1.0", tk.END).strip()
-    if not input_text or len(input_text) < 10:
-        messagebox.showwarning("⚠️ Warning", "Please enter at least 10 characters of text.")
+# Load the summarization pipeline
+summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+
+# Main summarization function
+def summarize_text():
+    input_text = input_box.get("1.0", tk.END).strip()
+    if not input_text:
+        messagebox.showwarning("Input Error", "Please enter some text to summarize.")
         return
-    try:
-        summary = summarize_text(input_text, num_sentences=3)
-        
-        # Clear input box
-        text_input.delete("1.0", tk.END)
 
-        # Display summary in output box
-        text_output.config(state=tk.NORMAL)
-        text_output.delete("1.0", tk.END)
-        text_output.insert(tk.END, summary)
-        text_output.config(state=tk.DISABLED)
-    except Exception as e:
-        messagebox.showerror("❌ Error", f"Something went wrong:\n{str(e)}")
+    # Disable the summarize button during processing
+    summarize_button.config(state=tk.DISABLED)
+    output_box.delete("1.0", tk.END)
 
-# --- GUI Setup ---
-app = tk.Tk()
-app.title("🧠 AI Text Summarizer")
-app.geometry("900x700")
-app.configure(bg="#f8f9fa")
+    def process():
+        try:
+            summary = summarizer(input_text, max_length=130, min_length=30, do_sample=False)[0]['summary_text']
+            output_box.insert(tk.END, summary)
+        except Exception as e:
+            output_box.insert(tk.END, f"Error: {e}")
+        finally:
+            summarize_button.config(state=tk.NORMAL)
 
-# Fonts and colors
-FONT_HEADING = ("Segoe UI", 18, "bold")
-FONT_LABEL = ("Segoe UI", 12)
-FONT_TEXT = ("Consolas", 12)
-BTN_COLOR = "#0077cc"
-BTN_HOVER = "#005fa3"
+    # Run in separate thread to keep GUI responsive
+    threading.Thread(target=process).start()
 
-# --- Heading ---
-heading = tk.Label(app, text="📝 AI Text Summarizer Tool", font=FONT_HEADING, bg="#f8f9fa", fg="#333")
-heading.pack(pady=(20, 10))
+# Create GUI window
+window = tk.Tk()
+window.title("Text Summarization Tool")
+window.geometry("800x600")
+window.config(padx=20, pady=20)
 
-# --- Input Section ---
-input_label = tk.Label(app, text="Enter text to summarize:", font=FONT_LABEL, bg="#f8f9fa", anchor="w")
-input_label.pack(padx=30, anchor="w")
+# Input label and text box
+tk.Label(window, text="Enter Long Article/Text:", font=("Arial", 12, "bold")).pack(anchor="w")
+input_box = scrolledtext.ScrolledText(window, wrap=tk.WORD, width=90, height=15, font=("Arial", 10))
+input_box.pack(pady=10)
 
-text_input = scrolledtext.ScrolledText(app, wrap=tk.WORD, width=100, height=12, font=FONT_TEXT, bg="#ffffff", bd=1, relief=tk.SOLID)
-text_input.pack(padx=30, pady=(5, 20))
+# Summarize button
+summarize_button = tk.Button(window, text="Summarize Text", command=summarize_text, font=("Arial", 12), bg="#4CAF50", fg="white")
+summarize_button.pack(pady=10)
 
-# --- Button with hover effect ---
-def on_enter(e): summarize_btn.config(bg=BTN_HOVER)
-def on_leave(e): summarize_btn.config(bg=BTN_COLOR)
+# Output label and text box
+tk.Label(window, text="Summary:", font=("Arial", 12, "bold")).pack(anchor="w")
+output_box = scrolledtext.ScrolledText(window, wrap=tk.WORD, width=90, height=10, font=("Arial", 10))
+output_box.pack(pady=10)
 
-summarize_btn = tk.Button(app, text="🔍 Summarize Text", font=("Segoe UI", 12, "bold"),
-                          bg=BTN_COLOR, fg="white", padx=20, pady=10,
-                          relief=tk.FLAT, command=summarize_action, cursor="hand2")
-summarize_btn.bind("<Enter>", on_enter)
-summarize_btn.bind("<Leave>", on_leave)
-summarize_btn.pack(pady=10)
-
-# --- Output Section ---
-output_label = tk.Label(app, text="Summary:", font=FONT_LABEL, bg="#f8f9fa", anchor="w")
-output_label.pack(padx=30, pady=(20, 0), anchor="w")
-
-text_output = scrolledtext.ScrolledText(app, wrap=tk.WORD, width=100, height=9, font=FONT_TEXT, bg="#f1f3f4", bd=1, relief=tk.SOLID)
-text_output.config(state=tk.DISABLED)
-text_output.pack(padx=30, pady=(5, 10))
-
-# --- Footer ---
-footer = tk.Label(app, text="Designed by Samrat Singh", font=("Segoe UI", 10, "italic"), bg="#f8f9fa", fg="#777")
-footer.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 10))
-
-# --- Run App ---
-app.mainloop()
+# Start the GUI event loop
+window.mainloop()
