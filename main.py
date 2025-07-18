@@ -1,53 +1,54 @@
 import tkinter as tk
-from tkinter import scrolledtext, messagebox
-from transformers import pipeline
-import threading
+from tkinter import filedialog, messagebox
+import speech_recognition as sr
+from pydub import AudioSegment
+import os
 
-# Load the summarization pipeline
-summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+def transcribe_audio(file_path):
+    recognizer = sr.Recognizer()
 
-# Main summarization function
-def summarize_text():
-    input_text = input_box.get("1.0", tk.END).strip()
-    if not input_text:
-        messagebox.showwarning("Input Error", "Please enter some text to summarize.")
-        return
+    # Convert to WAV if not already
+    if not file_path.endswith(".wav"):
+        audio = AudioSegment.from_file(file_path)
+        audio.export("converted.wav", format="wav")
+        audio_path = "converted.wav"
+    else:
+        audio_path = file_path
 
-    # Disable the summarize button during processing
-    summarize_button.config(state=tk.DISABLED)
-    output_box.delete("1.0", tk.END)
-
-    def process():
+    # Recognize speech
+    with sr.AudioFile(audio_path) as source:
+        audio_data = recognizer.record(source)
         try:
-            summary = summarizer(input_text, max_length=130, min_length=30, do_sample=False)[0]['summary_text']
-            output_box.insert(tk.END, summary)
-        except Exception as e:
-            output_box.insert(tk.END, f"Error: {e}")
-        finally:
-            summarize_button.config(state=tk.NORMAL)
+            text = recognizer.recognize_google(audio_data)
+            return text
+        except sr.UnknownValueError:
+            return "Could not understand audio"
+        except sr.RequestError:
+            return "API unavailable or quota exceeded"
 
-    # Run in separate thread to keep GUI responsive
-    threading.Thread(target=process).start()
+def upload_file():
+    file_path = filedialog.askopenfilename(
+        title="Select Audio File",
+        filetypes=[("Audio Files", "*.mp3 *.wav *.flac *.ogg")]
+    )
+    if file_path:
+        messagebox.showinfo("Processing", "Transcribing, please wait...")
+        result = transcribe_audio(file_path)
+        text_box.delete("1.0", tk.END)
+        text_box.insert(tk.END, result)
 
-# Create GUI window
-window = tk.Tk()
-window.title("Text Summarization Tool")
-window.geometry("800x600")
-window.config(padx=20, pady=20)
+# --- GUI Setup ---
+root = tk.Tk()
+root.title("Speech to Text App")
+root.geometry("600x400")
+root.resizable(False, False)
 
-# Input label and text box
-tk.Label(window, text="Enter Long Article/Text:", font=("Arial", 12, "bold")).pack(anchor="w")
-input_box = scrolledtext.ScrolledText(window, wrap=tk.WORD, width=90, height=15, font=("Arial", 10))
-input_box.pack(pady=10)
+# Upload Button
+upload_btn = tk.Button(root, text="Upload Audio File", font=("Arial", 12), command=upload_file)
+upload_btn.pack(pady=20)
 
-# Summarize button
-summarize_button = tk.Button(window, text="Summarize Text", command=summarize_text, font=("Arial", 12), bg="#4CAF50", fg="white")
-summarize_button.pack(pady=10)
+# Text Box
+text_box = tk.Text(root, wrap=tk.WORD, font=("Arial", 12), bg="white", fg="black")
+text_box.pack(expand=True, fill=tk.BOTH, padx=20, pady=10)
 
-# Output label and text box
-tk.Label(window, text="Summary:", font=("Arial", 12, "bold")).pack(anchor="w")
-output_box = scrolledtext.ScrolledText(window, wrap=tk.WORD, width=90, height=10, font=("Arial", 10))
-output_box.pack(pady=10)
-
-# Start the GUI event loop
-window.mainloop()
+root.mainloop()
